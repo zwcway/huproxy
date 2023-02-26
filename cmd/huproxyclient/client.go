@@ -36,6 +36,7 @@ import (
 var (
 	writeTimeout = flag.Duration("write_timeout", 10*time.Second, "Write timeout")
 	basicAuth    = flag.String("auth", "", "HTTP Basic Auth in @<filename> or <username>:<password> format.")
+	oauthToken   = flag.String("token", "", "OAuth2 authentication token in JSON web token format.")
 	certFile     = flag.String("cert", "", "Certificate Auth File")
 	keyFile      = flag.String("key", "", "Certificate Key File")
 	verbose      = flag.Bool("verbose", false, "Verbose.")
@@ -113,6 +114,10 @@ func main() {
 		head["Authorization"] = []string{
 			"Basic " + a,
 		}
+	}
+
+	if *oauthToken != "" {
+		head["Authorization"] = []string{"Bearer " + *oauthToken}
 	}
 
 	// Load client cert
