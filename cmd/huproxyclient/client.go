@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -30,7 +31,7 @@ import (
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
 
-	huproxy "github.com/google/huproxy/lib"
+	huproxy "github.com/zwcway/huproxy/lib"
 )
 
 var (
@@ -39,6 +40,8 @@ var (
 	oauthToken   = flag.String("token", "", "OAuth2 authentication token in JSON web token format.")
 	certFile     = flag.String("cert", "", "Certificate Auth File")
 	keyFile      = flag.String("key", "", "Certificate Key File")
+	host         = flag.String("host", "", "connect host")
+	port         = flag.String("port", "", "connect port")
 	verbose      = flag.Bool("verbose", false, "Verbose.")
 	insecure     = flag.Bool("insecure_conn", false, "Skip certificate validation")
 )
@@ -128,6 +131,10 @@ func main() {
 		}
 
 		dialer.TLSClientConfig.Certificates = []tls.Certificate{cert}
+	}
+
+	if *host != "" && *port != "" {
+		head["Connect"] = []string{net.JoinHostPort(*host, *port)}
 	}
 
 	conn, resp, err := dialer.Dial(url, head)

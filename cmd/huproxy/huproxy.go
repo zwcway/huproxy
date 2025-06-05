@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,7 +26,7 @@ import (
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
 
-	huproxy "github.com/google/huproxy/lib"
+	huproxy "github.com/zwcway/huproxy/lib"
 )
 
 var (
@@ -43,13 +43,25 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
-	vars := mux.Vars(r)
-	host := vars["host"]
-	port := vars["port"]
+	host := r.Header.Get("Connect")
+	port := ""
+	if host == "" {
+		vars := mux.Vars(r)
+		host = vars["host"]
+		port = vars["port"]
+	} else {
+		host, port, _ = net.SplitHostPort(host)
+	}
+	if host == "" || port == "" {
+		log.Warningf("Missing host or port")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Warningf("Failed to upgrade to websockets: %v", err)
+		w.WriteHeader(http.StatusBadGateway)
 		return
 	}
 	defer conn.Close()
@@ -57,6 +69,7 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 	s, err := net.DialTimeout("tcp", net.JoinHostPort(host, port), *dialTimeout)
 	if err != nil {
 		log.Warningf("Failed to connect to %q:%q: %v", host, port, err)
+		w.WriteHeader(http.StatusServiceUnavailable)
 		return
 	}
 	defer s.Close()
