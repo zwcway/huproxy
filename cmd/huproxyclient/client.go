@@ -42,6 +42,7 @@ var (
 	keyFile      = flag.String("key", "", "Certificate Key File")
 	host         = flag.String("host", "", "connect host")
 	port         = flag.String("port", "", "connect port")
+	proxy        = flag.Bool("proxy", false, "use system proxy")
 	verbose      = flag.Bool("verbose", false, "Verbose.")
 	insecure     = flag.Bool("insecure_conn", false, "Skip certificate validation")
 )
@@ -94,12 +95,13 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	dialContext := proxyplease.NewDialContext(proxyplease.Proxy{})
-
 	dialer := websocket.Dialer{
 		// It's not documented if handshake timeout defaults.
 		HandshakeTimeout: websocket.DefaultDialer.HandshakeTimeout,
-		NetDialContext:   dialContext,
+	}
+
+	if *proxy {
+		dialer.NetDialContext = proxyplease.NewDialContext(proxyplease.Proxy{})
 	}
 
 	dialer.TLSClientConfig = &tls.Config{

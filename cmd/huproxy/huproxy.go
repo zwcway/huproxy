@@ -20,6 +20,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -35,6 +36,8 @@ var (
 	handshakeTimeout = flag.Duration("handshake_timeout", 10*time.Second, "Handshake timeout.")
 	writeTimeout     = flag.Duration("write_timeout", 10*time.Second, "Write timeout.")
 	url              = flag.String("url", "proxy", "Path to listen to.")
+	logFile          = flag.String("log", "stdout", "log to.")
+	logLevel         = flag.String("level", "info", "log level.")
 
 	upgrader websocket.Upgrader
 )
@@ -74,8 +77,16 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	defer s.Close()
 
+	log.Infof("incoming connection from %q to %q", conn.RemoteAddr(), s.RemoteAddr())
 	// websocket -> server
 	go func() {
+		defer func() {
+			now := time.Now().Add(1 * time.Millisecond)
+			if err := s.SetDeadline(now); err != nil {
+				log.Warningf("Closing server connection: %v", err)
+			}
+			log.Debugf("outgoing connection from %q to %q", conn.RemoteAddr(), s.RemoteAddr())
+		}()
 		for {
 			mt, r, err := conn.NextReader()
 			if websocket.IsCloseError(err,
@@ -111,10 +122,47 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 	} else if err != nil {
 		log.Warningf("Reading from file: %v", err)
 	}
+	log.Debugf("finished connection from %q to %q", conn.RemoteAddr(), s.RemoteAddr())
 }
 
+func setLogger() func() {
+	var f *os.File
+	var err error
+
+	switch *logFile {
+	case "stdout":
+		log.SetOutput(os.Stdout)
+	case "stderr":
+		log.SetOutput(os.Stderr)
+	default:
+		f, err = os.OpenFile(*logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		if err != nil {
+			log.Fatalf("Failed to open log file %q: %v", *logFile, err)
+		}
+		log.SetOutput(f)
+	}
+
+	switch *logLevel {
+	case "debug":
+		log.SetLevel(log.DebugLevel)
+	case "info":
+		log.SetLevel(log.InfoLevel)
+	case "warn":
+		log.SetLevel(log.WarnLevel)
+	case "error":
+		log.SetLevel(log.ErrorLevel)
+	default:
+		log.Fatalf("Unknown log level %q", *logLevel)
+	}
+	return func() {
+		if f != nil {
+			f.Close()
+		}
+	}
+}
 func main() {
 	flag.Parse()
+	defer setLogger()()
 
 	upgrader = websocket.Upgrader{
 		ReadBufferSize:   1024,
@@ -128,6 +176,7 @@ func main() {
 	log.Infof("huproxy %s", huproxy.Version)
 	m := mux.NewRouter()
 	m.HandleFunc(fmt.Sprintf("/%s/{host}/{port}", *url), handleProxy)
+	m.HandleFunc(fmt.Sprintf("/%s", *url), handleProxy)
 	s := &http.Server{
 		Addr:           *listen,
 		Handler:        m,
